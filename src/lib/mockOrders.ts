@@ -202,7 +202,7 @@ export const initialMockOrders: Order[] = [
     declineReason: null,
     customerNotified: true,
     placedAt: m(31),
-    acceptedAt: m: m(29) as never,
+    acceptedAt: m(29),
     startedAt: m(25),
     readyAt: m(4),
     outForDeliveryAt: null,
