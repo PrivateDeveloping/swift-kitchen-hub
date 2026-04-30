@@ -1,6 +1,7 @@
-import { createFileRoute, redirect, Outlet } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { createFileRoute, redirect, Outlet, useNavigate } from "@tanstack/react-router";
 import { TopNav } from "@/components/TopNav";
-import { getToken, getUser } from "@/lib/auth";
+import { getToken, getUser, type User } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: () => {
@@ -13,8 +14,24 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthenticatedLayout() {
-  const user = getUser();
-  if (!user) return null;
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const u = getUser();
+    if (!getToken() || !u) {
+      navigate({ to: "/login" });
+      return;
+    }
+    setUser(u);
+    setHydrated(true);
+  }, [navigate]);
+
+  if (!hydrated || !user) {
+    return <div className="min-h-screen bg-background" />;
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <TopNav user={user} />
