@@ -16,7 +16,7 @@ import { KitchenCard } from "@/components/kitchen/KitchenCard";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/kitchen")({
-  component: KitchenDashboard;
+  component: KitchenDashboard,
 });
 
 type ColumnKey = "todo" | "progress" | "done";
