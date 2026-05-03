@@ -7,8 +7,14 @@ import { OrderCard } from "@/components/acceptance/OrderCard";
 import { DeclineDialog } from "@/components/acceptance/DeclineDialog";
 import { ConfirmDialog } from "@/components/acceptance/ConfirmDialog";
 
+import { RequireRole } from "@/components/RequireRole";
+
 export const Route = createFileRoute("/_authenticated/acceptance")({
-  component: AcceptanceDashboard,
+  component: () => (
+    <RequireRole route="acceptance">
+      <AcceptanceDashboard />
+    </RequireRole>
+  ),
 });
 
 type DialogState =
