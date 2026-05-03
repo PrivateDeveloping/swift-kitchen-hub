@@ -72,23 +72,23 @@ function AcceptanceDashboard() {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KanbanColumn title="Pending" count={buckets.pending.length} pulseWhenActive>
-          {buckets.pending.map((o) => (
+        <KanbanColumn title="Pending" count={pendingOrders.length} pulseWhenActive>
+          {pendingOrders.map((o) => (
             <OrderCard
               key={o.id}
               order={o}
-              onAccept={handleAccept}
+              onAccept={acceptOrder}
               onDecline={handleDecline}
             />
           ))}
         </KanbanColumn>
-        <KanbanColumn title="Accepted" count={buckets.accepted.length}>
-          {buckets.accepted.map((o) => (
+        <KanbanColumn title="Accepted" count={acceptanceAcceptedOrders.length}>
+          {acceptanceAcceptedOrders.map((o) => (
             <OrderCard key={o.id} order={o} />
           ))}
         </KanbanColumn>
-        <KanbanColumn title="Ready" count={buckets.ready.length}>
-          {buckets.ready.map((o) => (
+        <KanbanColumn title="Ready" count={readyOrders.length}>
+          {readyOrders.map((o) => (
             <OrderCard
               key={o.id}
               order={o}
@@ -97,8 +97,8 @@ function AcceptanceDashboard() {
             />
           ))}
         </KanbanColumn>
-        <KanbanColumn title="Out for Delivery" count={buckets.out.length}>
-          {buckets.out.map((o) => (
+        <KanbanColumn title="Out for Delivery" count={outForDeliveryOrders.length}>
+          {outForDeliveryOrders.map((o) => (
             <OrderCard key={o.id} order={o} />
           ))}
         </KanbanColumn>
