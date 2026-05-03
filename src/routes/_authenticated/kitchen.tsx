@@ -15,8 +15,14 @@ import type { Order } from "@/lib/types";
 import { KitchenCard } from "@/components/kitchen/KitchenCard";
 import { cn } from "@/lib/utils";
 
+import { RequireRole } from "@/components/RequireRole";
+
 export const Route = createFileRoute("/_authenticated/kitchen")({
-  component: KitchenDashboard,
+  component: () => (
+    <RequireRole route="kitchen">
+      <KitchenDashboard />
+    </RequireRole>
+  ),
 });
 
 type ColumnKey = "todo" | "progress" | "done";
