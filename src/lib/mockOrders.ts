@@ -7,6 +7,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o1",
     orderNumber: "A1B2",
+    trackingToken: "trk_a1b2_o1",
+    cancelToken: "cnl_a1b2_o1",
     status: "PENDING",
     customerName: "Sarah Mitchell",
     customerPhone: "+1 415 555 0142",
@@ -33,6 +35,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o2",
     orderNumber: "C3D4",
+    trackingToken: "trk_c3d4_o2",
+    cancelToken: "cnl_c3d4_o2",
     status: "PENDING",
     customerName: "Marcus Chen",
     customerPhone: "+1 415 555 0188",
@@ -60,6 +64,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o3",
     orderNumber: "E5F6",
+    trackingToken: "trk_e5f6_o3",
+    cancelToken: "cnl_e5f6_o3",
     status: "PENDING",
     customerName: "Priya Patel",
     customerPhone: "+1 415 555 0199",
@@ -87,6 +93,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o4",
     orderNumber: "G7H8",
+    trackingToken: "trk_g7h8_o4",
+    cancelToken: "cnl_g7h8_o4",
     status: "ACCEPTED",
     customerName: "Daniel Kim",
     customerPhone: "+1 415 555 0211",
@@ -113,6 +121,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o5",
     orderNumber: "J9K0",
+    trackingToken: "trk_j9k0_o5",
+    cancelToken: null,
     status: "IN_PROGRESS",
     customerName: "Olivia Rodriguez",
     customerPhone: "+1 415 555 0234",
@@ -139,6 +149,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o6",
     orderNumber: "L1M2",
+    trackingToken: "trk_l1m2_o6",
+    cancelToken: null,
     status: "IN_PROGRESS",
     customerName: "James Thompson",
     customerPhone: "+1 415 555 0256",
@@ -165,6 +177,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o7",
     orderNumber: "N3P4",
+    trackingToken: "trk_n3p4_o7",
+    cancelToken: null,
     status: "READY",
     customerName: "Aisha Williams",
     customerPhone: "+1 415 555 0278",
@@ -191,6 +205,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o8",
     orderNumber: "Q5R6",
+    trackingToken: "trk_q5r6_o8",
+    cancelToken: null,
     status: "READY",
     customerName: "Ethan Brooks",
     customerPhone: "+1 415 555 0290",
@@ -217,6 +233,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o9",
     orderNumber: "S7T8",
+    trackingToken: "trk_s7t8_o9",
+    cancelToken: null,
     status: "OUT_FOR_DELIVERY",
     customerName: "Hannah Lee",
     customerPhone: "+1 415 555 0312",
@@ -243,6 +261,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o10",
     orderNumber: "U9V0",
+    trackingToken: "trk_u9v0_o10",
+    cancelToken: null,
     status: "OUT_FOR_DELIVERY",
     customerName: "Robert Garcia",
     customerPhone: "+1 415 555 0334",
@@ -270,6 +290,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o11",
     orderNumber: "W1X2",
+    trackingToken: "trk_w1x2_o11",
+    cancelToken: null,
     status: "DELIVERED",
     customerName: "Sophia Anderson",
     customerPhone: "+1 415 555 0356",
@@ -296,6 +318,8 @@ export const initialMockOrders: Order[] = [
   {
     id: "o12",
     orderNumber: "Y3Z4",
+    trackingToken: "trk_y3z4_o12",
+    cancelToken: null,
     status: "DECLINED",
     customerName: "Liam Foster",
     customerPhone: "+1 415 555 0378",

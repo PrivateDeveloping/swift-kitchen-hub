@@ -20,6 +20,8 @@ export type OrderItem = {
 export type Order = {
   id: string;
   orderNumber: string;
+  trackingToken: string;
+  cancelToken: string | null;
   status: OrderStatus;
   customerName: string;
   customerPhone: string;

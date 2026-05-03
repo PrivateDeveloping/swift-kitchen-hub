@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence } from "framer-motion";
 import {
@@ -10,76 +10,60 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { initialMockOrders } from "@/lib/mockOrders";
-import type { Order, OrderStatus } from "@/lib/types";
+import { useOrders } from "@/hooks/useOrders";
+import type { Order } from "@/lib/types";
 import { KitchenCard } from "@/components/kitchen/KitchenCard";
 import { cn } from "@/lib/utils";
 
+import { RequireRole } from "@/components/RequireRole";
+
 export const Route = createFileRoute("/_authenticated/kitchen")({
-  component: KitchenDashboard,
+  component: () => (
+    <RequireRole route="kitchen">
+      <KitchenDashboard />
+    </RequireRole>
+  ),
 });
 
 type ColumnKey = "todo" | "progress" | "done";
 
-const COLUMNS: { key: ColumnKey; title: string; status: OrderStatus; accent: string }[] = [
-  { key: "todo", title: "To Do", status: "ACCEPTED", accent: "" },
-  { key: "progress", title: "In Progress", status: "IN_PROGRESS", accent: "text-amber-600" },
-  { key: "done", title: "Done", status: "READY", accent: "text-emerald-600" },
+const COLUMNS: { key: ColumnKey; title: string; accent: string }[] = [
+  { key: "todo", title: "To Do", accent: "" },
+  { key: "progress", title: "In Progress", accent: "text-amber-600" },
+  { key: "done", title: "Done", accent: "text-emerald-600" },
 ];
 
 function KitchenDashboard() {
-  const [orders, setOrders] = useState<Order[]>(initialMockOrders);
+  const {
+    orders,
+    kitchenTodoOrders,
+    kitchenInProgressOrders,
+    kitchenDoneOrders,
+    startOrder,
+    markKitchenOrderReady,
+    moveKitchenOrderBackward,
+  } = useOrders();
   const [pendingDoneId, setPendingDoneId] = useState<string | null>(null);
 
-  const buckets = useMemo(() => {
-    const sortByPlaced = (a: Order, b: Order) =>
-      new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime();
-    return {
-      todo: orders.filter((o) => o.status === "ACCEPTED").sort(sortByPlaced),
-      progress: orders.filter((o) => o.status === "IN_PROGRESS").sort(sortByPlaced),
-      done: orders.filter((o) => o.status === "READY").sort(sortByPlaced),
-    };
-  }, [orders]);
-
-  const setStatus = (id: string, status: OrderStatus) => {
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id !== id) return o;
-        const next: Order = { ...o, status };
-        if (status === "IN_PROGRESS" && !next.startedAt) next.startedAt = nowIso;
-        if (status === "READY" && !next.readyAt) next.readyAt = nowIso;
-        if (status === "ACCEPTED") {
-          // moving back from progress: clear startedAt so timing resets if restarted
-          next.startedAt = null;
-          next.readyAt = null;
-        }
-        if (status === "IN_PROGRESS") {
-          next.readyAt = null;
-        }
-        return next;
-      }),
-    );
+  const buckets: Record<ColumnKey, Order[]> = {
+    todo: kitchenTodoOrders,
+    progress: kitchenInProgressOrders,
+    done: kitchenDoneOrders,
   };
 
   const handleSingleTap = (id: string) => {
     const order = orders.find((o) => o.id === id);
     if (!order) return;
-    if (order.status === "ACCEPTED") setStatus(id, "IN_PROGRESS");
+    if (order.status === "ACCEPTED") startOrder(id);
     else if (order.status === "IN_PROGRESS") setPendingDoneId(id);
-    // READY: do nothing
   };
 
   const handleDoubleTap = (id: string) => {
-    const order = orders.find((o) => o.id === id);
-    if (!order) return;
-    if (order.status === "READY") setStatus(id, "IN_PROGRESS");
-    else if (order.status === "IN_PROGRESS") setStatus(id, "ACCEPTED");
-    // ACCEPTED: do nothing
+    moveKitchenOrderBackward(id);
   };
 
   const confirmDone = () => {
-    if (pendingDoneId) setStatus(pendingDoneId, "READY");
+    if (pendingDoneId) markKitchenOrderReady(pendingDoneId);
     setPendingDoneId(null);
   };
 

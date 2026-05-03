@@ -1,5 +1,12 @@
+import { appConfig } from "./config";
+
+const currencyFormatter = new Intl.NumberFormat(appConfig.locale, {
+  style: "currency",
+  currency: appConfig.currency,
+});
+
 export function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return currencyFormatter.format(cents / 100);
 }
 
 export function formatTime(iso: string): string {

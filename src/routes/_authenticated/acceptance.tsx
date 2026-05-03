@@ -1,15 +1,20 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Archive } from "lucide-react";
-import { initialMockOrders } from "@/lib/mockOrders";
-import type { Order } from "@/lib/types";
+import { useOrders } from "@/hooks/useOrders";
 import { KanbanColumn } from "@/components/acceptance/KanbanColumn";
 import { OrderCard } from "@/components/acceptance/OrderCard";
 import { DeclineDialog } from "@/components/acceptance/DeclineDialog";
 import { ConfirmDialog } from "@/components/acceptance/ConfirmDialog";
 
+import { RequireRole } from "@/components/RequireRole";
+
 export const Route = createFileRoute("/_authenticated/acceptance")({
-  component: AcceptanceDashboard,
+  component: () => (
+    <RequireRole route="acceptance">
+      <AcceptanceDashboard />
+    </RequireRole>
+  ),
 });
 
 type DialogState =
@@ -19,31 +24,21 @@ type DialogState =
   | { kind: "pickup"; orderId: string };
 
 function AcceptanceDashboard() {
-  const [orders, setOrders] = useState<Order[]>(initialMockOrders);
+  const {
+    orders,
+    pendingOrders,
+    acceptanceAcceptedOrders,
+    readyOrders,
+    outForDeliveryOrders,
+    acceptOrder,
+    declineOrder,
+    dispatchOrder,
+    markDelivered,
+  } = useOrders();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
-
-  const buckets = useMemo(() => {
-    const sortByPlaced = (a: Order, b: Order) =>
-      new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime();
-    return {
-      pending: orders.filter((o) => o.status === "PENDING").sort(sortByPlaced),
-      accepted: orders
-        .filter((o) => o.status === "ACCEPTED" || o.status === "IN_PROGRESS")
-        .sort(sortByPlaced),
-      ready: orders.filter((o) => o.status === "READY").sort(sortByPlaced),
-      out: orders.filter((o) => o.status === "OUT_FOR_DELIVERY").sort(sortByPlaced),
-    };
-  }, [orders]);
 
   const activeOrder =
     dialog.kind !== "none" ? orders.find((o) => o.id === dialog.orderId) ?? null : null;
-
-  const handleAccept = (id: string) => {
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: "ACCEPTED", acceptedAt: nowIso } : o)),
-    );
-  };
 
   const handleDecline = (id: string) => setDialog({ kind: "decline", orderId: id });
   const handleDispatchOpen = (id: string) => setDialog({ kind: "dispatch", orderId: id });
@@ -51,57 +46,17 @@ function AcceptanceDashboard() {
 
   const confirmDecline = (reason: string) => {
     if (dialog.kind !== "decline") return;
-    const id = dialog.orderId;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: "DECLINED",
-              declinedAt: nowIso,
-              declineReason: reason || null,
-              customerNotified: true,
-            }
-          : o,
-      ),
-    );
+    declineOrder(dialog.orderId, reason || null);
   };
 
   const confirmDispatch = (notify: boolean) => {
     if (dialog.kind !== "dispatch") return;
-    const id = dialog.orderId;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: "OUT_FOR_DELIVERY",
-              outForDeliveryAt: nowIso,
-              customerNotified: notify,
-            }
-          : o,
-      ),
-    );
+    dispatchOrder(dialog.orderId, notify);
   };
 
   const confirmPickup = (notify: boolean) => {
     if (dialog.kind !== "pickup") return;
-    const id = dialog.orderId;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: "DELIVERED",
-              deliveredAt: nowIso,
-              customerNotified: notify,
-            }
-          : o,
-      ),
-    );
+    markDelivered(dialog.orderId, notify);
   };
 
   return (
@@ -123,23 +78,23 @@ function AcceptanceDashboard() {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KanbanColumn title="Pending" count={buckets.pending.length} pulseWhenActive>
-          {buckets.pending.map((o) => (
+        <KanbanColumn title="Pending" count={pendingOrders.length} pulseWhenActive>
+          {pendingOrders.map((o) => (
             <OrderCard
               key={o.id}
               order={o}
-              onAccept={handleAccept}
+              onAccept={acceptOrder}
               onDecline={handleDecline}
             />
           ))}
         </KanbanColumn>
-        <KanbanColumn title="Accepted" count={buckets.accepted.length}>
-          {buckets.accepted.map((o) => (
+        <KanbanColumn title="Accepted" count={acceptanceAcceptedOrders.length}>
+          {acceptanceAcceptedOrders.map((o) => (
             <OrderCard key={o.id} order={o} />
           ))}
         </KanbanColumn>
-        <KanbanColumn title="Ready" count={buckets.ready.length}>
-          {buckets.ready.map((o) => (
+        <KanbanColumn title="Ready" count={readyOrders.length}>
+          {readyOrders.map((o) => (
             <OrderCard
               key={o.id}
               order={o}
@@ -148,8 +103,8 @@ function AcceptanceDashboard() {
             />
           ))}
         </KanbanColumn>
-        <KanbanColumn title="Out for Delivery" count={buckets.out.length}>
-          {buckets.out.map((o) => (
+        <KanbanColumn title="Out for Delivery" count={outForDeliveryOrders.length}>
+          {outForDeliveryOrders.map((o) => (
             <OrderCard key={o.id} order={o} />
           ))}
         </KanbanColumn>
