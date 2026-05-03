@@ -15,8 +15,14 @@ import { Card } from "@/components/ui/card";
 import { useOrders } from "@/hooks/useOrders";
 import { formatCurrency, formatRelative } from "@/lib/format";
 
+import { RequireRole } from "@/components/RequireRole";
+
 export const Route = createFileRoute("/_authenticated/driver")({
-  component: DriverDashboard,
+  component: () => (
+    <RequireRole route="driver">
+      <DriverDashboard />
+    </RequireRole>
+  ),
 });
 
 function DriverDashboard() {
