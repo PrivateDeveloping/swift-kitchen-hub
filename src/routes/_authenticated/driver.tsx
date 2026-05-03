@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { Phone, MapPin, StickyNote, ChevronDown, ChevronUp, PackageCheck } from "lucide-react";
@@ -12,8 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { initialMockOrders } from "@/lib/mockOrders";
-import type { Order } from "@/lib/types";
+import { useOrders } from "@/hooks/useOrders";
 import { formatCurrency, formatRelative } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/driver")({
@@ -21,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/driver")({
 });
 
 function DriverDashboard() {
-  const [orders, setOrders] = useState<Order[]>(initialMockOrders);
+  const { driverOrders, markDelivered } = useOrders();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [, force] = useState(0);
@@ -32,30 +31,13 @@ function DriverDashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const deliveries = useMemo(
-    () =>
-      orders
-        .filter((o) => o.status === "OUT_FOR_DELIVERY")
-        .sort((a, b) => {
-          const at = a.outForDeliveryAt ? new Date(a.outForDeliveryAt).getTime() : 0;
-          const bt = b.outForDeliveryAt ? new Date(b.outForDeliveryAt).getTime() : 0;
-          return at - bt;
-        }),
-    [orders],
-  );
+  const deliveries = driverOrders;
 
-  const pendingOrder = pendingId ? orders.find((o) => o.id === pendingId) ?? null : null;
+  const pendingOrder = pendingId ? deliveries.find((o) => o.id === pendingId) ?? null : null;
 
   const confirmDeliver = () => {
     if (!pendingId) return;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === pendingId
-          ? { ...o, status: "DELIVERED", deliveredAt: nowIso, customerNotified: true }
-          : o,
-      ),
-    );
+    markDelivered(pendingId, true);
     setPendingId(null);
   };
 
