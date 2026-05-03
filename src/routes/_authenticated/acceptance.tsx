@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Archive } from "lucide-react";
-import { initialMockOrders } from "@/lib/mockOrders";
-import type { Order } from "@/lib/types";
+import { useOrders } from "@/hooks/useOrders";
 import { KanbanColumn } from "@/components/acceptance/KanbanColumn";
 import { OrderCard } from "@/components/acceptance/OrderCard";
 import { DeclineDialog } from "@/components/acceptance/DeclineDialog";
@@ -19,31 +18,21 @@ type DialogState =
   | { kind: "pickup"; orderId: string };
 
 function AcceptanceDashboard() {
-  const [orders, setOrders] = useState<Order[]>(initialMockOrders);
+  const {
+    orders,
+    pendingOrders,
+    acceptanceAcceptedOrders,
+    readyOrders,
+    outForDeliveryOrders,
+    acceptOrder,
+    declineOrder,
+    dispatchOrder,
+    markDelivered,
+  } = useOrders();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
-
-  const buckets = useMemo(() => {
-    const sortByPlaced = (a: Order, b: Order) =>
-      new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime();
-    return {
-      pending: orders.filter((o) => o.status === "PENDING").sort(sortByPlaced),
-      accepted: orders
-        .filter((o) => o.status === "ACCEPTED" || o.status === "IN_PROGRESS")
-        .sort(sortByPlaced),
-      ready: orders.filter((o) => o.status === "READY").sort(sortByPlaced),
-      out: orders.filter((o) => o.status === "OUT_FOR_DELIVERY").sort(sortByPlaced),
-    };
-  }, [orders]);
 
   const activeOrder =
     dialog.kind !== "none" ? orders.find((o) => o.id === dialog.orderId) ?? null : null;
-
-  const handleAccept = (id: string) => {
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: "ACCEPTED", acceptedAt: nowIso } : o)),
-    );
-  };
 
   const handleDecline = (id: string) => setDialog({ kind: "decline", orderId: id });
   const handleDispatchOpen = (id: string) => setDialog({ kind: "dispatch", orderId: id });
@@ -51,57 +40,17 @@ function AcceptanceDashboard() {
 
   const confirmDecline = (reason: string) => {
     if (dialog.kind !== "decline") return;
-    const id = dialog.orderId;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: "DECLINED",
-              declinedAt: nowIso,
-              declineReason: reason || null,
-              customerNotified: true,
-            }
-          : o,
-      ),
-    );
+    declineOrder(dialog.orderId, reason || null);
   };
 
   const confirmDispatch = (notify: boolean) => {
     if (dialog.kind !== "dispatch") return;
-    const id = dialog.orderId;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: "OUT_FOR_DELIVERY",
-              outForDeliveryAt: nowIso,
-              customerNotified: notify,
-            }
-          : o,
-      ),
-    );
+    dispatchOrder(dialog.orderId, notify);
   };
 
   const confirmPickup = (notify: boolean) => {
     if (dialog.kind !== "pickup") return;
-    const id = dialog.orderId;
-    const nowIso = new Date().toISOString();
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: "DELIVERED",
-              deliveredAt: nowIso,
-              customerNotified: notify,
-            }
-          : o,
-      ),
-    );
+    markDelivered(dialog.orderId, notify);
   };
 
   return (
