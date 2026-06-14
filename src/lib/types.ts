@@ -1,3 +1,14 @@
+export type UserRole = "admin" | "acceptance" | "kitchen" | "driver";
+
+export type StaffUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OrderStatus =
   | "PENDING"
   | "ACCEPTED"
