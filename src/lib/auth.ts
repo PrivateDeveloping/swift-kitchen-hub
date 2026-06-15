@@ -1,3 +1,5 @@
+import { apiFetch } from "./api";
+
 export type Role = "admin" | "acceptance" | "kitchen" | "driver";
 
 export interface User {
@@ -10,32 +12,28 @@ export interface User {
 const TOKEN_KEY = "sk_token";
 const USER_KEY = "sk_user";
 
-const MOCK_USERS: Record<string, { password: string; user: User }> = {
-  "accept@test.com": {
-    password: "password",
-    user: { id: "u-accept", email: "accept@test.com", name: "Alex Accept", role: "acceptance" },
-  },
-  "kitchen@test.com": {
-    password: "password",
-    user: { id: "u-kitchen", email: "kitchen@test.com", name: "Kim Kitchen", role: "kitchen" },
-  },
-  "driver@test.com": {
-    password: "password",
-    user: { id: "u-driver", email: "driver@test.com", name: "Dani Driver", role: "driver" },
-  },
-  "admin@test.com": {
-    password: "password",
-    user: { id: "u-admin", email: "admin@test.com", name: "Avery Admin", role: "admin" },
-  },
+type LoginResponse = {
+  token: string;
+  user: User;
 };
 
-export function login(email: string, password: string): User | null {
-  const entry = MOCK_USERS[email.toLowerCase().trim()];
-  if (!entry || entry.password !== password) return null;
-  const fakeJwt = `fake.${btoa(entry.user.id)}.${Date.now()}`;
-  localStorage.setItem(TOKEN_KEY, fakeJwt);
-  localStorage.setItem(USER_KEY, JSON.stringify(entry.user));
-  return entry.user;
+/**
+ * Sign in against the real backend.
+ * Throws ApiError or NetworkError on failure.
+ * On success, stores token + user in localStorage and returns the user.
+ */
+export async function login(email: string, password: string): Promise<User> {
+  const data = await apiFetch<LoginResponse>("/api/auth/login", {
+    method: "POST",
+    body: {
+      email: email.toLowerCase().trim(),
+      password,
+    },
+  });
+
+  localStorage.setItem(TOKEN_KEY, data.token);
+  localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  return data.user;
 }
 
 export function logout() {

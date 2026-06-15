@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { login, getToken, getUser, homePathForRole } from "@/lib/auth";
+import { ApiError, NetworkError } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
@@ -37,20 +39,32 @@ type FormValues = z.infer<typeof schema>;
 function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" },
   });
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     setError(null);
-    const user = login(values.email, values.password);
-    if (!user) {
-      setError("Invalid email or password");
-      return;
+    setSubmitting(true);
+    try {
+      const user = await login(values.email, values.password);
+      navigate({ to: homePathForRole(user.role) });
+    } catch (err) {
+      if (err instanceof NetworkError) {
+        setError("Could not reach the server. Is the backend running?");
+      } else if (err instanceof ApiError && err.status === 401) {
+        setError("Invalid email or password");
+      } else if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
     }
-    navigate({ to: homePathForRole(user.role) });
   };
 
   return (
@@ -76,6 +90,7 @@ function LoginPage() {
                         autoComplete="email"
                         placeholder="you@restaurant.com"
                         className="h-12 text-base"
+                        disabled={submitting}
                         {...field}
                       />
                     </FormControl>
@@ -95,6 +110,7 @@ function LoginPage() {
                         autoComplete="current-password"
                         placeholder="••••••••"
                         className="h-12 text-base"
+                        disabled={submitting}
                         {...field}
                       />
                     </FormControl>
@@ -110,8 +126,15 @@ function LoginPage() {
                   {error}
                 </div>
               )}
-              <Button type="submit" size="lg" className="h-12 w-full text-base">
-                Sign in
+              <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Signing in…
+                  </>
+                ) : (
+                  "Sign in"
+                )}
               </Button>
             </form>
           </Form>
