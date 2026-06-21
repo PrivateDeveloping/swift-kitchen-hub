@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Order, OrderStatus } from "@/lib/types";
 import { apiFetch, ApiError, NetworkError } from "@/lib/api";
+import { connectSocket } from "@/lib/socket";
 
 const sortByPlaced = (a: Order, b: Order) =>
   new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime();
@@ -19,6 +20,37 @@ function describeError(err: unknown, fallback: string): string {
   if (err instanceof NetworkError) return err.message;
   if (err instanceof ApiError) return err.message;
   return fallback;
+}
+
+// Roles only see orders with certain statuses. The backend filters its initial
+// GET response, and the WebSocket broadcast goes to all staff — so the frontend
+// must also filter to avoid showing kitchen staff a PENDING order, for example.
+const STATUSES_VISIBLE_TO_ROLE: Record<string, OrderStatus[]> = {
+  admin: [
+    "PENDING",
+    "ACCEPTED",
+    "IN_PROGRESS",
+    "READY",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+    "DECLINED",
+    "CANCELLED",
+  ],
+  acceptance: ["PENDING", "ACCEPTED", "IN_PROGRESS", "READY", "OUT_FOR_DELIVERY"],
+  kitchen: ["ACCEPTED", "IN_PROGRESS", "READY"],
+  driver: ["OUT_FOR_DELIVERY"],
+};
+
+function getCurrentRole(): string {
+  if (typeof window === "undefined") return "admin";
+  const raw = localStorage.getItem("sk_user");
+  if (!raw) return "admin";
+  try {
+    const u = JSON.parse(raw) as { role?: string };
+    return u.role ?? "admin";
+  } catch {
+    return "admin";
+  }
 }
 
 export function useOrders() {
@@ -52,8 +84,64 @@ export function useOrders() {
     };
   }, []);
 
+  // -----------------------------------------------------------
+  // Realtime subscription
+  // -----------------------------------------------------------
+  // After the initial fetch, we listen for live updates from the server.
+  // The server broadcasts on any order change — accept, dispatch, etc.
+  // We just merge whatever it sends into our local state.
+  useEffect(() => {
+    const socket = connectSocket();
+    if (!socket) return;
+
+    const role = getCurrentRole();
+    const visible = new Set(STATUSES_VISIBLE_TO_ROLE[role] ?? []);
+
+    const handleUpdated = (incoming: Order) => {
+      setOrders((prev) => {
+        const exists = prev.some((o) => o.id === incoming.id);
+        const isVisible = visible.has(incoming.status);
+
+        // Order moved INTO a status we should see — add or replace
+        if (isVisible) {
+          if (exists) {
+            return prev.map((o) => (o.id === incoming.id ? incoming : o));
+          }
+          return [...prev, incoming];
+        }
+
+        // Order moved OUT of a status we should see (e.g. DELIVERED for kitchen)
+        // — remove it from our local list
+        if (exists) {
+          return prev.filter((o) => o.id !== incoming.id);
+        }
+
+        return prev;
+      });
+    };
+
+    const handleCreated = (incoming: Order) => {
+      // A new order was just placed — only acceptance and admin care
+      const visibleForRole = STATUSES_VISIBLE_TO_ROLE[role] ?? [];
+      if (!visibleForRole.includes(incoming.status)) return;
+
+      setOrders((prev) => {
+        if (prev.some((o) => o.id === incoming.id)) return prev;
+        return [...prev, incoming];
+      });
+    };
+
+    socket.on("order:updated", handleUpdated);
+    socket.on("order:created", handleCreated);
+
+    return () => {
+      socket.off("order:updated", handleUpdated);
+      socket.off("order:created", handleCreated);
+    };
+  }, []);
+
   // ---------------------------------------------------------------------
-  // Local state helpers
+  // Local state helpers (unchanged from previous session)
   // ---------------------------------------------------------------------
 
   const replaceOrder = useCallback((next: Order) => {
@@ -88,14 +176,6 @@ export function useOrders() {
     [],
   );
 
-  /**
-   * Optimistic mutation pattern:
-   * 1. Snapshot the current order (for rollback)
-   * 2. Apply optimistic local update so UI feels instant
-   * 3. Call the backend
-   * 4. On success, replace with server's authoritative version (timestamps etc.)
-   * 5. On failure, roll back to the snapshot and toast an error
-   */
   const optimisticMutation = useCallback(
     async (
       id: string,
@@ -118,7 +198,6 @@ export function useOrders() {
         });
         replaceOrder(data.order);
       } catch (err) {
-        // Roll back ONLY this order, not the whole list
         replaceOrder(original);
         toast.error(describeError(err, errorFallback));
       }
@@ -127,7 +206,7 @@ export function useOrders() {
   );
 
   // ---------------------------------------------------------------------
-  // Mutations (real API calls with optimistic UI)
+  // Mutations (unchanged from previous session)
   // ---------------------------------------------------------------------
 
   const acceptOrder = useCallback(
@@ -228,9 +307,6 @@ export function useOrders() {
     [optimisticMutation],
   );
 
-  // markDelivered hits different endpoints depending on the order's current status:
-  //  - From READY (pickup / direct handoff): POST /complete
-  //  - From OUT_FOR_DELIVERY (driver finished): POST /deliver
   const markDelivered = useCallback(
     async (id: string, notify = true) => {
       const o = orders.find((x) => x.id === id);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, redirect, Outlet, useNavigate } from "@tanstack/react-router";
 import { TopNav } from "@/components/TopNav";
 import { getToken, getUser, type User } from "@/lib/auth";
+import { connectSocket } from "@/lib/socket";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: () => {
@@ -26,6 +27,11 @@ function AuthenticatedLayout() {
     }
     setUser(u);
     setHydrated(true);
+
+    // Ensure the realtime socket is open for any logged-in session.
+    // This matters on page refresh — the user is still authenticated via
+    // localStorage but the in-memory socket variable was wiped.
+    connectSocket();
   }, [navigate]);
 
   if (!hydrated || !user) {

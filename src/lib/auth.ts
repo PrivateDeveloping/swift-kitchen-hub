@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import { connectSocket, disconnectSocket } from "./socket";
 
 export type Role = "admin" | "acceptance" | "kitchen" | "driver";
 
@@ -19,8 +20,7 @@ type LoginResponse = {
 
 /**
  * Sign in against the real backend.
- * Throws ApiError or NetworkError on failure.
- * On success, stores token + user in localStorage and returns the user.
+ * On success: stores token + user, opens the realtime socket, returns the user.
  */
 export async function login(email: string, password: string): Promise<User> {
   const data = await apiFetch<LoginResponse>("/api/auth/login", {
@@ -33,10 +33,15 @@ export async function login(email: string, password: string): Promise<User> {
 
   localStorage.setItem(TOKEN_KEY, data.token);
   localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+
+  // Open the realtime connection now that we have a token.
+  connectSocket();
+
   return data.user;
 }
 
 export function logout() {
+  disconnectSocket();
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }

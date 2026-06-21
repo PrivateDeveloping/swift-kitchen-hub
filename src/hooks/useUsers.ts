@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
-import { initialMockUsers } from "@/lib/mockUsers";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StaffUser, UserRole } from "@/lib/types";
+import { apiFetch, ApiError, NetworkError } from "@/lib/api";
 
 export class DuplicateEmailError extends Error {
   constructor() {
@@ -16,15 +16,11 @@ export class OnlyAdminError extends Error {
   }
 }
 
-function uuid(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+export class CantDeleteSelfError extends Error {
+  constructor() {
+    super("You can't delete your own account while logged in");
+    this.name = "CantDeleteSelfError";
   }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
 }
 
 export type CreateUserInput = {
@@ -40,8 +36,61 @@ export type UpdateUserPatch = {
   role?: UserRole;
 };
 
+type UsersListResponse = { users: StaffUser[] };
+type UserResponse = { user: StaffUser };
+
+/**
+ * Translate the backend's error codes into the structured errors the rest of
+ * the UI expects. Anything else gets surfaced as-is.
+ */
+function translateApiError(err: unknown): Error {
+  if (err instanceof ApiError) {
+    const body = err.body as { code?: string } | null;
+    if (body?.code === "EMAIL_TAKEN") return new DuplicateEmailError();
+    if (body?.code === "ONLY_ADMIN") return new OnlyAdminError();
+    if (body?.code === "CANT_DELETE_SELF") return new CantDeleteSelfError();
+    return err;
+  }
+  if (err instanceof Error) return err;
+  return new Error("Unknown error");
+}
+
 export function useUsers() {
-  const [users, setUsers] = useState<StaffUser[]>(initialMockUsers);
+  const [users, setUsers] = useState<StaffUser[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Initial fetch
+  useEffect(() => {
+    let cancelled = false;
+    const ac = new AbortController();
+
+    setLoading(true);
+    setLoadError(null);
+
+    apiFetch<UsersListResponse>("/api/users", { auth: true, signal: ac.signal })
+      .then((data) => {
+        if (cancelled) return;
+        setUsers(data.users);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled || ac.signal.aborted) return;
+        if (err instanceof NetworkError) {
+          setLoadError("Could not reach the server.");
+        } else if (err instanceof ApiError) {
+          setLoadError(err.message);
+        } else {
+          setLoadError("Failed to load users.");
+        }
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, []);
 
   const sortedUsers = useMemo(
     () =>
@@ -51,77 +100,78 @@ export function useUsers() {
     [users],
   );
 
-  const createUser = useCallback((input: CreateUserInput): StaffUser => {
-    const email = input.email.toLowerCase().trim();
-    let created: StaffUser | null = null;
-    setUsers((prev) => {
-      if (prev.some((u) => u.email.toLowerCase() === email)) {
-        throw new DuplicateEmailError();
-      }
-      const now = new Date().toISOString();
-      created = {
-        id: uuid(),
-        email,
-        name: input.name.trim(),
-        role: input.role,
-        createdAt: now,
-        updatedAt: now,
-      };
-      return [...prev, created];
-    });
-    // password intentionally unused in mock
-    void input.password;
-    if (!created) throw new Error("Failed to create user");
-    return created;
-  }, []);
-
-  const updateUser = useCallback((id: string, patch: UpdateUserPatch): StaffUser => {
-    let updated: StaffUser | null = null;
-    setUsers((prev) => {
-      if (patch.email) {
-        const next = patch.email.toLowerCase().trim();
-        if (prev.some((u) => u.id !== id && u.email.toLowerCase() === next)) {
-          throw new DuplicateEmailError();
-        }
-      }
-      return prev.map((u) => {
-        if (u.id !== id) return u;
-        updated = {
-          ...u,
-          ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
-          ...(patch.email !== undefined ? { email: patch.email.toLowerCase().trim() } : {}),
-          ...(patch.role !== undefined ? { role: patch.role } : {}),
-          updatedAt: new Date().toISOString(),
-        };
-        return updated;
+  const createUser = useCallback(async (input: CreateUserInput): Promise<StaffUser> => {
+    try {
+      const data = await apiFetch<UserResponse>("/api/users", {
+        method: "POST",
+        auth: true,
+        body: {
+          email: input.email.toLowerCase().trim(),
+          name: input.name.trim(),
+          role: input.role,
+          password: input.password,
+        },
       });
-    });
-    if (!updated) throw new Error("User not found");
-    return updated;
+      setUsers((prev) => [...prev, data.user]);
+      return data.user;
+    } catch (err) {
+      throw translateApiError(err);
+    }
   }, []);
 
-  const deleteUser = useCallback((id: string) => {
-    setUsers((prev) => {
-      const target = prev.find((u) => u.id === id);
-      if (!target) return prev;
-      if (target.role === "admin") {
-        const admins = prev.filter((u) => u.role === "admin");
-        if (admins.length <= 1) {
-          throw new OnlyAdminError();
-        }
+  const updateUser = useCallback(
+    async (id: string, patch: UpdateUserPatch): Promise<StaffUser> => {
+      try {
+        const data = await apiFetch<UserResponse>(`/api/users/${id}`, {
+          method: "PATCH",
+          auth: true,
+          body: {
+            ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+            ...(patch.email !== undefined ? { email: patch.email.toLowerCase().trim() } : {}),
+            ...(patch.role !== undefined ? { role: patch.role } : {}),
+          },
+        });
+        setUsers((prev) => prev.map((u) => (u.id === id ? data.user : u)));
+        return data.user;
+      } catch (err) {
+        throw translateApiError(err);
       }
-      return prev.filter((u) => u.id !== id);
-    });
+    },
+    [],
+  );
+
+  const deleteUser = useCallback(async (id: string): Promise<void> => {
+    try {
+      await apiFetch<void>(`/api/users/${id}`, {
+        method: "DELETE",
+        auth: true,
+      });
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+    } catch (err) {
+      throw translateApiError(err);
+    }
   }, []);
 
-  const resetPassword = useCallback((_id: string, _newPassword: string) => {
-    // Mock no-op. Swap point for real API.
-    void _id;
-    void _newPassword;
-  }, []);
+  const resetPassword = useCallback(
+    async (id: string, newPassword: string): Promise<void> => {
+      try {
+        await apiFetch<UserResponse>(`/api/users/${id}/reset-password`, {
+          method: "POST",
+          auth: true,
+          body: { password: newPassword },
+        });
+        // No local state to update - we don't store passwords client-side
+      } catch (err) {
+        throw translateApiError(err);
+      }
+    },
+    [],
+  );
 
   return {
     users: sortedUsers,
+    loading,
+    loadError,
     createUser,
     updateUser,
     deleteUser,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Search, Users } from "lucide-react";
+import { Loader2, Plus, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { StaffTable } from "@/components/admin/StaffTable";
 import { StaffFormDialog } from "@/components/admin/StaffFormDialog";
 import { ResetPasswordDialog } from "@/components/admin/ResetPasswordDialog";
 import { DeleteUserDialog } from "@/components/admin/DeleteUserDialog";
-import { OnlyAdminError, useUsers } from "@/hooks/useUsers";
+import { CantDeleteSelfError, OnlyAdminError, useUsers } from "@/hooks/useUsers";
 import type { StaffUser, UserRole } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -28,7 +28,8 @@ type DialogState =
   | { kind: "delete"; user: StaffUser };
 
 function AdminDashboard() {
-  const { users, createUser, updateUser, deleteUser, resetPassword } = useUsers();
+  const { users, loading, loadError, createUser, updateUser, deleteUser, resetPassword } =
+    useUsers();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
 
   const [searchInput, setSearchInput] = useState("");
@@ -49,32 +50,32 @@ function AdminDashboard() {
 
   const close = () => setDialog({ kind: "none" });
 
-  const handleCreate = (values: {
+  const handleCreate = async (values: {
     name: string;
     email: string;
     role: UserRole;
     password: string;
   }) => {
-    const created = createUser(values);
+    const created = await createUser(values);
     toast.success(`Account created for ${created.name}`);
   };
 
-  const handleUpdate = (
+  const handleUpdate = async (
     id: string,
     values: { name: string; email: string; role: UserRole },
   ) => {
-    updateUser(id, values);
+    await updateUser(id, values);
     toast.success("Account updated");
   };
 
-  const handleReset = (id: string, newPassword: string) => {
-    resetPassword(id, newPassword);
+  const handleReset = async (id: string, newPassword: string) => {
+    await resetPassword(id, newPassword);
     toast.success("Password reset");
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     try {
-      deleteUser(id);
+      await deleteUser(id);
       toast.success("Account deleted.");
       close();
     } catch (err) {
@@ -83,7 +84,13 @@ function AdminDashboard() {
         close();
         return;
       }
-      throw err;
+      if (err instanceof CantDeleteSelfError) {
+        toast.error("You can't delete your own account while logged in.");
+        close();
+        return;
+      }
+      toast.error(err instanceof Error ? err.message : "Failed to delete account");
+      close();
     }
   };
 
@@ -96,13 +103,22 @@ function AdminDashboard() {
             Manage who can access Swift Kitchen and what they can do.
           </p>
         </div>
-        <Button onClick={() => setDialog({ kind: "create" })}>
+        <Button onClick={() => setDialog({ kind: "create" })} disabled={loading}>
           <Plus className="h-4 w-4" />
           Add staff
         </Button>
       </div>
 
-      {users.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">Loading staff…</p>
+        </div>
+      ) : loadError ? (
+        <div className="text-center py-20 text-destructive">
+          <p>{loadError}</p>
+        </div>
+      ) : users.length === 0 ? (
         <EmptyState onAdd={() => setDialog({ kind: "create" })} />
       ) : (
         <>

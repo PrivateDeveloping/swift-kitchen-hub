@@ -73,8 +73,8 @@ export type StaffFormDialogProps = {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   user: StaffUser | null;
-  onCreate: (values: CreateValues) => void;
-  onUpdate: (id: string, values: EditValues) => void;
+  onCreate: (values: CreateValues) => Promise<void>;
+  onUpdate: (id: string, values: EditValues) => Promise<void>;
 };
 
 export function StaffFormDialog({
@@ -122,30 +122,30 @@ export function StaffFormDialog({
     }
   };
 
-  const submitCreate = (values: CreateValues) => {
+  const submitCreate = async (values: CreateValues) => {
     try {
-      onCreate(values);
+      await onCreate(values);
       onOpenChange(false);
     } catch (err) {
       if (err instanceof DuplicateEmailError) {
         createForm.setError("email", { message: "An account with this email already exists" });
         return;
       }
-      throw err;
+      toast.error(err instanceof Error ? err.message : "Failed to create account");
     }
   };
 
-  const submitEdit = (values: EditValues) => {
+  const submitEdit = async (values: EditValues) => {
     if (!user) return;
     try {
-      onUpdate(user.id, values);
+      await onUpdate(user.id, values);
       onOpenChange(false);
     } catch (err) {
       if (err instanceof DuplicateEmailError) {
         editForm.setError("email", { message: "An account with this email already exists" });
         return;
       }
-      throw err;
+      toast.error(err instanceof Error ? err.message : "Failed to update account");
     }
   };
 
