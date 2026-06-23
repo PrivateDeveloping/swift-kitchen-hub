@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Archive } from "lucide-react";
 import { useOrders } from "@/hooks/useOrders";
 import { KanbanColumn } from "@/components/acceptance/KanbanColumn";
@@ -68,13 +68,13 @@ function AcceptanceDashboard() {
             Review incoming orders, dispatch deliveries, and complete pickups.
           </p>
         </div>
-        <button
-          type="button"
+        <Link
+          to="/archive"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <Archive className="h-4 w-4" aria-hidden />
           View archive
-        </button>
+        </Link>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

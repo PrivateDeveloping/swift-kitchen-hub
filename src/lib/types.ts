@@ -1,5 +1,24 @@
 export type UserRole = "admin" | "acceptance" | "kitchen" | "driver";
 
+export type Category = {
+  id: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+};
+
+export type MenuItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number; // cents
+  category: string; // category slug
+  imageUrl: string | null;
+  available: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StaffUser = {
   id: string;
   email: string;
@@ -43,6 +62,8 @@ export type Order = {
   total: number;
   declineReason: string | null;
   customerNotified: boolean;
+  assignedDriverId: string | null;
+  assignedDriver: { id: string; name: string } | null;
   placedAt: string;
   acceptedAt: string | null;
   startedAt: string | null;

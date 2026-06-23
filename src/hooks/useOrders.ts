@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Order, OrderStatus } from "@/lib/types";
 import { apiFetch, ApiError, NetworkError } from "@/lib/api";
 import { connectSocket } from "@/lib/socket";
+import { playChime } from "@/lib/sound";
 
 const sortByPlaced = (a: Order, b: Order) =>
   new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime();
@@ -38,25 +39,33 @@ const STATUSES_VISIBLE_TO_ROLE: Record<string, OrderStatus[]> = {
   ],
   acceptance: ["PENDING", "ACCEPTED", "IN_PROGRESS", "READY", "OUT_FOR_DELIVERY"],
   kitchen: ["ACCEPTED", "IN_PROGRESS", "READY"],
-  driver: ["OUT_FOR_DELIVERY"],
+  driver: ["READY", "OUT_FOR_DELIVERY"],
 };
 
-function getCurrentRole(): string {
-  if (typeof window === "undefined") return "admin";
+function getCurrentUser(): { id?: string; role?: string } {
+  if (typeof window === "undefined") return {};
   const raw = localStorage.getItem("sk_user");
-  if (!raw) return "admin";
+  if (!raw) return {};
   try {
-    const u = JSON.parse(raw) as { role?: string };
-    return u.role ?? "admin";
+    return JSON.parse(raw) as { id?: string; role?: string };
   } catch {
-    return "admin";
+    return {};
   }
+}
+
+function getCurrentRole(): string {
+  return getCurrentUser().role ?? "admin";
 }
 
 export function useOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // IDs of orders currently in this role's actionable view. Used to detect a
+  // *new arrival* (so we chime once per order entering the board, not on the
+  // board's own forward/backward moves, which echo back over the socket).
+  const knownIds = useRef<Set<string>>(new Set());
 
   // Initial fetch
   useEffect(() => {
@@ -69,6 +78,8 @@ export function useOrders() {
     apiFetch<OrdersListResponse>("/api/orders", { auth: true, signal: ac.signal })
       .then((data) => {
         if (cancelled) return;
+        // Seed known IDs from the initial load so existing orders don't chime.
+        data.orders.forEach((o) => knownIds.current.add(o.id));
         setOrders(data.orders);
         setLoading(false);
       })
@@ -98,9 +109,29 @@ export function useOrders() {
     const visible = new Set(STATUSES_VISIBLE_TO_ROLE[role] ?? []);
 
     const handleUpdated = (incoming: Order) => {
+      const isVisible = visible.has(incoming.status);
+      const wasKnown = knownIds.current.has(incoming.id);
+
+      // Chime when an order *newly enters* this role's board:
+      //  - kitchen: acceptance just accepted it (→ ACCEPTED)
+      //  - driver:  a fresh order is ready to claim (→ READY)
+      // The order's own later transitions echo back here but are already
+      // known, so they don't re-chime.
+      if (isVisible && !wasKnown) {
+        if (
+          (role === "kitchen" && incoming.status === "ACCEPTED") ||
+          (role === "driver" && incoming.status === "READY")
+        ) {
+          playChime();
+        }
+      }
+
+      // Keep the known-set in sync with what we can currently see.
+      if (isVisible) knownIds.current.add(incoming.id);
+      else knownIds.current.delete(incoming.id);
+
       setOrders((prev) => {
         const exists = prev.some((o) => o.id === incoming.id);
-        const isVisible = visible.has(incoming.status);
 
         // Order moved INTO a status we should see — add or replace
         if (isVisible) {
@@ -124,6 +155,14 @@ export function useOrders() {
       // A new order was just placed — only acceptance and admin care
       const visibleForRole = STATUSES_VISIBLE_TO_ROLE[role] ?? [];
       if (!visibleForRole.includes(incoming.status)) return;
+
+      const wasKnown = knownIds.current.has(incoming.id);
+      knownIds.current.add(incoming.id);
+
+      // A freshly placed order lands on the acceptance (and admin) board.
+      if (!wasKnown && (role === "acceptance" || role === "admin")) {
+        playChime();
+      }
 
       setOrders((prev) => {
         if (prev.some((o) => o.id === incoming.id)) return prev;
@@ -335,6 +374,37 @@ export function useOrders() {
     [orders, optimisticMutation],
   );
 
+  // Driver self-assignment actions. Each posts to a per-driver endpoint and
+  // replaces the order with the server's response (the realtime broadcast also
+  // syncs every other dashboard).
+  const runDriverAction = useCallback(
+    async (id: string, action: "claim" | "release" | "take", errorFallback: string) => {
+      try {
+        const data = await apiFetch<OrderResponse>(`/api/orders/${id}/${action}`, {
+          method: "POST",
+          auth: true,
+        });
+        replaceOrder(data.order);
+      } catch (err) {
+        toast.error(describeError(err, errorFallback));
+      }
+    },
+    [replaceOrder],
+  );
+
+  const claimOrder = useCallback(
+    (id: string) => runDriverAction(id, "claim", "Couldn't claim that order"),
+    [runDriverAction],
+  );
+  const releaseOrder = useCallback(
+    (id: string) => runDriverAction(id, "release", "Couldn't release that order"),
+    [runDriverAction],
+  );
+  const takeOrder = useCallback(
+    (id: string) => runDriverAction(id, "take", "Couldn't send that order out"),
+    [runDriverAction],
+  );
+
   // ---------------------------------------------------------------------
   // Filtered lists (unchanged)
   // ---------------------------------------------------------------------
@@ -372,9 +442,36 @@ export function useOrders() {
     [orders],
   );
 
-  const driverOrders = useMemo(
-    () => orders.filter((o) => o.status === "OUT_FOR_DELIVERY").sort(sortByDispatched),
+  const currentUserId = useMemo(() => getCurrentUser().id, []);
+
+  // Unclaimed orders any driver can pick up (ready to go, or pushed out by
+  // acceptance without a driver).
+  const driverAvailableOrders = useMemo(
+    () =>
+      orders
+        .filter(
+          (o) =>
+            !o.assignedDriverId &&
+            (o.status === "READY" || o.status === "OUT_FOR_DELIVERY"),
+        )
+        .sort(sortByPlaced),
     [orders],
+  );
+
+  // Orders this driver has claimed that are still in flight (ready, or out for
+  // delivery). Excludes terminal statuses so delivered orders drop off the
+  // board — important for admins, who can otherwise see DELIVERED orders.
+  const driverMineOrders = useMemo(
+    () =>
+      orders
+        .filter(
+          (o) =>
+            !!o.assignedDriverId &&
+            o.assignedDriverId === currentUserId &&
+            (o.status === "READY" || o.status === "OUT_FOR_DELIVERY"),
+        )
+        .sort(sortByDispatched),
+    [orders, currentUserId],
   );
 
   return {
@@ -388,7 +485,8 @@ export function useOrders() {
     kitchenTodoOrders,
     kitchenInProgressOrders,
     kitchenDoneOrders,
-    driverOrders,
+    driverAvailableOrders,
+    driverMineOrders,
     acceptOrder,
     declineOrder,
     startOrder,
@@ -397,5 +495,8 @@ export function useOrders() {
     markKitchenOrderReady,
     dispatchOrder,
     markDelivered,
+    claimOrder,
+    releaseOrder,
+    takeOrder,
   };
 }
