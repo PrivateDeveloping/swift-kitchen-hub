@@ -15,7 +15,9 @@ export default defineConfig({
     tailwindcss(),
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
     tanstackStart({
-      // Block client bundles from importing server-only code.
+      server: {
+        preset: "vercel",
+      },
       importProtection: {
         behavior: "error",
         client: {
