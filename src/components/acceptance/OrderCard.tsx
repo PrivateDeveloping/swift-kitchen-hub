@@ -107,7 +107,7 @@ export function OrderCard({ order, onAccept, onDecline, onDispatch, onPickup }: 
 
       <div className="mt-4">
         {order.status === "PENDING" && (
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
             <Button
               size="lg"
               className="h-11 flex-1"
@@ -132,7 +132,7 @@ export function OrderCard({ order, onAccept, onDecline, onDispatch, onPickup }: 
           </Badge>
         )}
         {order.status === "READY" && (
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
             <Button size="lg" className="h-11 flex-1" onClick={() => onDispatch?.(order.id)}>
               Out for Delivery
             </Button>

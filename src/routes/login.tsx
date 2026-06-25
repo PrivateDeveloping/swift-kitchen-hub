@@ -138,15 +138,6 @@ function LoginPage() {
               </Button>
             </form>
           </Form>
-          <div className="mt-6 rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            <div className="mb-1 font-medium text-foreground">Demo accounts (password: password)</div>
-            <ul className="space-y-0.5">
-              <li>admin@test.com</li>
-              <li>accept@test.com</li>
-              <li>kitchen@test.com</li>
-              <li>driver@test.com</li>
-            </ul>
-          </div>
         </CardContent>
       </Card>
     </div>
